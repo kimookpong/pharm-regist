@@ -64,7 +64,7 @@ export default function Home() {
         </section>
       )}
 
-      <div className="text-center">
+      <div className="text-center flex flex-col sm:flex-row gap-3 justify-center items-center">
         {ev.register_open ? (
           <Link to="/register" className="btn-primary inline-block">
             ลงทะเบียนเข้าร่วม
@@ -72,6 +72,12 @@ export default function Home() {
         ) : (
           <p className="text-warning font-medium">ปิดรับลงทะเบียนแล้ว</p>
         )}
+        <Link
+          to="/status"
+          className="inline-block px-5 py-2.5 rounded-xl font-semibold border border-primary text-primary hover:bg-bg"
+        >
+          ตรวจสอบสถานะการลงทะเบียน
+        </Link>
       </div>
 
       {ev.contact && (
