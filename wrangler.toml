@@ -1,0 +1,49 @@
+name = "pharm-regist"
+main = "src/index.ts"
+compatibility_date = "2025-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Custom domain — zone konthai.app active บน Cloudflare แล้ว
+# wrangler จะสร้าง DNS record `regist` + SSL cert ให้อัตโนมัติตอน deploy
+routes = [{ pattern = "regist.konthai.app", custom_domain = true }]
+
+# ---- หน้าเว็บ React SPA (build จาก web/) ----
+[assets]
+directory = "./web/dist"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+run_worker_first = ["/api/*"]
+
+# ---- D1: ฐานข้อมูลหลัก ----
+# NOTE: ยังไม่ provision — database_id เป็น placeholder
+#   สร้างจริง: wrangler d1 create pharm-regist-db  แล้วเอา id มาใส่
+[[d1_databases]]
+binding = "DB"
+database_name = "pharm-regist-db"
+database_id = "3421e58d-5b44-419b-84c6-e2788a5731bf"
+migrations_dir = "migrations"
+
+# ---- R2: เก็บสลิป + PDF ใบเสร็จ ----
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "pharm-regist-files"
+
+# ---- KV: settings / rate-limit ----
+[[kv_namespaces]]
+binding = "CONFIG"
+id = "e9569f3d8fc043409c007f9aa518e6e5"
+
+# ฝังไฟล์ฟอนต์ .ttf เข้า bundle เป็น ArrayBuffer (ใช้ทำ PDF ใบเสร็จ)
+[[rules]]
+type = "Data"
+globs = ["**/*.ttf"]
+fallthrough = true
+
+[vars]
+APP_NAME = "ระบบรับลงทะเบียนประชุมวิชาการออนไลน์"
+EVENT_YEAR = "2026"
+
+# ---- secrets (ตั้งด้วย: wrangler secret put <NAME>) ----
+#   JWT_SECRET       — คีย์เซ็น JWT
+#   RESEND_API_KEY   — API key ของ Resend
+#   MAIL_FROM        — อีเมลผู้ส่งที่ verify แล้ว เช่น no-reply@yourdomain.com
