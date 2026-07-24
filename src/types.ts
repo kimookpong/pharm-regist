@@ -8,10 +8,13 @@ export interface Env {
   // vars
   APP_NAME: string;
   EVENT_YEAR: string;
+  APP_URL: string;
+  TURNSTILE_SITEKEY: string; // public site key (ว่าง = ปิด Turnstile)
   // secrets
   JWT_SECRET: string;
   RESEND_API_KEY: string;
   MAIL_FROM: string;
+  TURNSTILE_SECRET: string; // ตั้งด้วย wrangler secret put (ว่าง = ข้ามการตรวจ)
 }
 
 export interface JwtPayload {

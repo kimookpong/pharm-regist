@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import type { Env, Variables } from "../../types";
+import { adminEditSchema } from "../../lib/validate";
 
 const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -59,19 +60,63 @@ app.get("/", async (c) => {
   });
 });
 
-// GET /api/admin/registrations/:id — รายละเอียดเต็ม (+ ข้อมูลใบเสร็จถ้ามี)
+// GET /api/admin/registrations/:id — รายละเอียดเต็ม (+ ใบเสร็จที่ยัง active)
 app.get("/:id{[0-9]+}", async (c) => {
   const id = parseInt(c.req.param("id"), 10);
   const row = await c.env.DB.prepare(
     `SELECT r.*, rc.receipt_no, rc.issue_date AS receipt_issue_date
      FROM registrations r
-     LEFT JOIN receipts rc ON rc.registration_id = r.id
+     LEFT JOIN receipts rc ON rc.registration_id = r.id AND rc.voided_at IS NULL
      WHERE r.id = ?1`,
   )
     .bind(id)
     .first();
   if (!row) return c.json({ error: "ไม่พบข้อมูล" }, 404);
   return c.json(row);
+});
+
+// PUT /api/admin/registrations/:id — แก้ไขข้อมูลลงทะเบียน (FR: admin edit)
+app.put("/:id{[0-9]+}", async (c) => {
+  const id = parseInt(c.req.param("id"), 10);
+  const parsed = adminEditSchema.safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) {
+    return c.json({ error: "ข้อมูลไม่ถูกต้อง", details: parsed.error.flatten().fieldErrors }, 400);
+  }
+  const d = parsed.data;
+
+  const exists = await c.env.DB.prepare("SELECT 1 FROM registrations WHERE id = ?1").bind(id).first();
+  if (!exists) return c.json({ error: "ไม่พบข้อมูล" }, 404);
+
+  // email ต้องไม่ซ้ำกับคนอื่น
+  const dup = await c.env.DB.prepare("SELECT 1 FROM registrations WHERE email = ?1 AND id <> ?2")
+    .bind(d.email, id)
+    .first();
+  if (dup) return c.json({ error: "อีเมลนี้ถูกใช้โดยผู้ลงทะเบียนคนอื่น" }, 409);
+
+  try {
+    await c.env.DB.prepare(
+      `UPDATE registrations SET
+         prefix=?2, first_name=?3, last_name=?4, phone=?5, email=?6, occupation=?7, license_no=?8,
+         position=?9, workplace=?10, work_address=?11, receipt_name=?12, receipt_address=?13,
+         receipt_type=?14, postal_name=?15, postal_address=?16, postal_province=?17, postal_zipcode=?18,
+         amount=?19, updated_at=datetime('now')
+       WHERE id=?1`,
+    )
+      .bind(
+        id, d.prefix, d.first_name, d.last_name, d.phone, d.email, d.occupation, d.license_no ?? null,
+        d.position, d.workplace ?? null, d.work_address ?? null, d.receipt_name, d.receipt_address ?? null,
+        d.receipt_type, d.postal_name ?? null, d.postal_address ?? null, d.postal_province ?? null,
+        d.postal_zipcode ?? null, d.amount,
+      )
+      .run();
+    return c.json({ ok: true });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "";
+    if (msg.includes("UNIQUE") && msg.includes("email")) {
+      return c.json({ error: "อีเมลนี้ถูกใช้แล้ว" }, 409);
+    }
+    return c.json({ error: "บันทึกไม่สำเร็จ" }, 500);
+  }
 });
 
 // GET /api/admin/registrations/:id/slip — เปิด/ดาวน์โหลดหลักฐาน (FR-04)

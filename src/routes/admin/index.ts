@@ -8,6 +8,7 @@ import receipts from "./receipts";
 import reports from "./reports";
 import exportRoutes from "./export";
 import settings from "./settings";
+import emailRoutes from "./email";
 
 const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -18,6 +19,7 @@ app.route("/", dashboard); // /api/admin/stats
 app.route("/registrations", registrations); // /api/admin/registrations[...]
 app.route("/registrations", review); // /api/admin/registrations/:id/approve|reject
 app.route("/registrations", receipts); // /api/admin/registrations/:id/receipt[/pdf]
+app.route("/registrations", emailRoutes); // /api/admin/registrations/:id/{send-email,emails}
 app.route("/reports", reports); // /api/admin/reports
 app.route("/export", exportRoutes); // /api/admin/export/{csv,xlsx,pdf}
 app.route("/settings", settings); // /api/admin/settings

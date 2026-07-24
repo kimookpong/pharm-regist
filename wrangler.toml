@@ -42,8 +42,11 @@ fallthrough = true
 [vars]
 APP_NAME = "ระบบรับลงทะเบียนประชุมวิชาการออนไลน์"
 EVENT_YEAR = "2026"
+APP_URL = "https://regist.konthai.app"   # ใช้ทำลิงก์ในอีเมล (ตรวจสอบสถานะ/ลงทะเบียน)
+TURNSTILE_SITEKEY = "0x4AAAAAAD2oTDg098K8nyUP"   # ใส่ site key จาก Cloudflare Turnstile (ว่าง = ปิดการใช้งาน)
 
 # ---- secrets (ตั้งด้วย: wrangler secret put <NAME>) ----
 #   JWT_SECRET       — คีย์เซ็น JWT
 #   RESEND_API_KEY   — API key ของ Resend
 #   MAIL_FROM        — อีเมลผู้ส่งที่ verify แล้ว เช่น no-reply@yourdomain.com
+#   TURNSTILE_SECRET — secret key ของ Turnstile widget (ว่าง/ไม่ตั้ง = ข้ามการตรวจ)

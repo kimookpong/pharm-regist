@@ -1,5 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api, ApiError } from "../lib/api";
+import FileDropzone from "../components/FileDropzone";
+import TurnstileWidget from "../components/TurnstileWidget";
 
 const PREFIXES = ["นาย", "นาง", "นางสาว", "ภก.", "ภญ.", "ดร.", "ผศ.", "รศ.", "ศ."];
 const OCCUPATIONS = ["เภสัชกร", "แพทย์", "พยาบาล", "นักวิชาการ", "นักศึกษา", "อื่น ๆ"];
@@ -54,29 +56,17 @@ export default function Register() {
   const [topError, setTopError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState<string | null>(null);
+  const [sitekey, setSitekey] = useState("");
+  const [turnstileToken, setTurnstileToken] = useState("");
+
+  useEffect(() => {
+    api
+      .get<{ turnstile_sitekey: string }>("/api/config")
+      .then((r) => setSitekey(r.turnstile_sitekey || ""))
+      .catch(() => setSitekey(""));
+  }, []);
 
   const set = (k: keyof FormState, v: string | boolean) => setF((s) => ({ ...s, [k]: v }));
-
-  async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (file.size > 10 * 1024 * 1024) {
-      setErrors((s) => ({ ...s, slip_key: ["ไฟล์ต้องไม่เกิน 10 MB"] }));
-      return;
-    }
-    setUploading(true);
-    setErrors((s) => ({ ...s, slip_key: [] }));
-    try {
-      const fd = new FormData();
-      fd.append("file", file);
-      const r = await api.post<{ slip_key: string; slip_filename: string }>("/api/upload", fd);
-      setSlip({ key: r.slip_key, filename: r.slip_filename });
-    } catch (err) {
-      setErrors((s) => ({ ...s, slip_key: [err instanceof ApiError ? err.message : "อัพโหลดล้มเหลว"] }));
-    } finally {
-      setUploading(false);
-    }
-  }
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -86,6 +76,10 @@ export default function Register() {
       setErrors({ slip_key: ["กรุณาแนบหลักฐานการชำระเงิน"] });
       return;
     }
+    if (sitekey && !turnstileToken) {
+      setTopError("กรุณายืนยันว่าไม่ใช่บอท (Turnstile) ก่อนส่ง");
+      return;
+    }
     setSubmitting(true);
     try {
       const r = await api.post<{ reg_no: string }>("/api/register", {
@@ -93,6 +87,7 @@ export default function Register() {
         license_no: f.license_no || null,
         slip_key: slip.key,
         slip_filename: slip.filename,
+        turnstile_token: turnstileToken || null,
       });
       setDone(r.reg_no);
     } catch (err) {
@@ -193,10 +188,13 @@ export default function Register() {
       {/* การชำระเงิน */}
       <section className="card p-5 space-y-4">
         <h2 className="font-semibold">การชำระเงิน</h2>
-        <Field label="หลักฐานการโอน (PDF, JPG, PNG ไม่เกิน 10 MB)" required error={err("slip_key")}>
-          <input type="file" accept="application/pdf,image/jpeg,image/png" onChange={onFile} />
-          {uploading && <p className="text-sm text-gray-500 mt-1">กำลังอัพโหลด…</p>}
-          {slip && <p className="text-sm text-success mt-1">✓ แนบแล้ว: {slip.filename}</p>}
+        <Field label="หลักฐานการโอน (PDF, JPG, PNG ไม่เกิน 10 MB)" required>
+          <FileDropzone
+            value={slip}
+            onChange={setSlip}
+            onUploadingChange={setUploading}
+            error={err("slip_key")}
+          />
         </Field>
       </section>
 
@@ -244,7 +242,13 @@ export default function Register() {
       </label>
       {err("accept_terms") && <p className="field-error">{err("accept_terms")}</p>}
 
-      <button type="submit" className="btn-primary w-full" disabled={submitting || uploading || !f.accept_terms}>
+      {sitekey && <TurnstileWidget sitekey={sitekey} onVerify={setTurnstileToken} />}
+
+      <button
+        type="submit"
+        className="btn-primary w-full"
+        disabled={submitting || uploading || !f.accept_terms || (!!sitekey && !turnstileToken)}
+      >
         {submitting ? "กำลังบันทึก…" : "ลงทะเบียน"}
       </button>
     </form>

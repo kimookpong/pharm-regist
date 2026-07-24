@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { Env, Variables } from "../../types";
 import { sendEmail } from "../../lib/email";
 import { approvedEmail, rejectedEmail } from "../../lib/templates";
+import { getEventSettings, emailCtx } from "../../lib/event";
 
 const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -41,7 +42,8 @@ app.post("/:id{[0-9]+}/approve", async (c) => {
     .bind(id, user.sub)
     .run();
 
-  const mail = approvedEmail(`${reg.prefix}${reg.first_name} ${reg.last_name}`, reg.reg_no);
+  const ctx = emailCtx(c.env, await getEventSettings(c.env));
+  const mail = approvedEmail(ctx, { name: `${reg.prefix}${reg.first_name} ${reg.last_name}`, regNo: reg.reg_no });
   c.executionCtx.waitUntil(
     sendEmail(c.env, { to: reg.email, subject: mail.subject, html: mail.html, type: "approved", registrationId: id }),
   );
@@ -71,7 +73,12 @@ app.post("/:id{[0-9]+}/reject", async (c) => {
     .bind(id, parsed.data.reason, user.sub)
     .run();
 
-  const mail = rejectedEmail(`${reg.prefix}${reg.first_name} ${reg.last_name}`, reg.reg_no, parsed.data.reason);
+  const ctx = emailCtx(c.env, await getEventSettings(c.env));
+  const mail = rejectedEmail(ctx, {
+    name: `${reg.prefix}${reg.first_name} ${reg.last_name}`,
+    regNo: reg.reg_no,
+    reason: parsed.data.reason,
+  });
   c.executionCtx.waitUntil(
     sendEmail(c.env, { to: reg.email, subject: mail.subject, html: mail.html, type: "rejected", registrationId: id }),
   );

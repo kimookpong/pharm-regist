@@ -4,29 +4,20 @@ import { registrationSchema } from "../lib/validate";
 import { nextDocNo } from "../lib/counter";
 import { sendEmail } from "../lib/email";
 import { confirmEmail } from "../lib/templates";
+import { getEventSettings, emailCtx } from "../lib/event";
+import { verifyTurnstile } from "../lib/turnstile";
 import { rateLimit } from "../middleware/ratelimit";
 
 const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 
-// ค่าเริ่มต้นของข้อมูลงาน (แก้ผ่าน admin แล้วเก็บใน KV: key = "event")
-const DEFAULT_EVENT = {
-  title: "การประชุมวิชาการออนไลน์",
-  banner: "",
-  detail: "",
-  event_date: "",
-  cpe: 0,
-  activity_code: "",
-  agenda: [] as Array<{ time: string; topic: string }>,
-  contact: "",
-  fee: 0, // สตางค์
-  register_open: true,
-};
-
 // GET /api/event — ข้อมูลหน้าแรก (FR-01)
 app.get("/event", async (c) => {
-  const raw = await c.env.CONFIG.get("event");
-  const event = raw ? { ...DEFAULT_EVENT, ...JSON.parse(raw) } : DEFAULT_EVENT;
-  return c.json(event);
+  return c.json(await getEventSettings(c.env));
+});
+
+// GET /api/config — ค่า public สำหรับ frontend (Turnstile site key)
+app.get("/config", (c) => {
+  return c.json({ turnstile_sitekey: c.env.TURNSTILE_SITEKEY ?? "" });
 });
 
 // POST /api/register — รับลงทะเบียน (FR-02, FR-03) — จำกัด 5 ครั้ง/นาที/IP
@@ -38,6 +29,18 @@ app.post("/register", rateLimit({ name: "register", limit: 5, windowMs: 60_000 }
   }
   const d = parsed.data;
 
+  // ตรวจ Turnstile (ถ้าตั้ง secret ไว้) — กันบอท
+  if (c.env.TURNSTILE_SECRET) {
+    if (!d.turnstile_token) {
+      return c.json({ error: "กรุณายืนยันว่าไม่ใช่บอท (Turnstile)" }, 400);
+    }
+    const ip = c.req.header("cf-connecting-ip") ?? undefined;
+    const ok = await verifyTurnstile(c.env.TURNSTILE_SECRET, d.turnstile_token, ip);
+    if (!ok) {
+      return c.json({ error: "การยืนยัน Turnstile ไม่ผ่าน กรุณาลองใหม่" }, 403);
+    }
+  }
+
   // ตรวจ email ซ้ำ (FR-03) — มี unique index รองรับอีกชั้น
   const dup = await c.env.DB.prepare("SELECT 1 FROM registrations WHERE email = ?1")
     .bind(d.email)
@@ -47,8 +50,8 @@ app.post("/register", rateLimit({ name: "register", limit: 5, windowMs: 60_000 }
   }
 
   // ค่าลงทะเบียนดึงจากตั้งค่างาน (ไม่เชื่อค่าจาก client)
-  const raw = await c.env.CONFIG.get("event");
-  const fee = raw ? (JSON.parse(raw).fee ?? 0) : 0;
+  const settings = await getEventSettings(c.env);
+  const fee = settings.fee;
 
   const regNo = await nextDocNo(c.env.DB, `reg_${c.env.EVENT_YEAR}`, "REG", c.env.EVENT_YEAR);
 
@@ -72,7 +75,11 @@ app.post("/register", rateLimit({ name: "register", limit: 5, windowMs: 60_000 }
       .first<{ id: number }>();
 
     // ส่งอีเมลยืนยันแบบ background ไม่ให้ block response (FR-06)
-    const mail = confirmEmail(`${d.prefix}${d.first_name} ${d.last_name}`, regNo);
+    const mail = confirmEmail(emailCtx(c.env, settings), {
+      name: `${d.prefix}${d.first_name} ${d.last_name}`,
+      regNo,
+      amount: fee,
+    });
     c.executionCtx.waitUntil(
       sendEmail(c.env, {
         to: d.email,

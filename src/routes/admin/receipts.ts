@@ -4,6 +4,8 @@ import { nextDocNo } from "../../lib/counter";
 import { generateReceiptPdf } from "../../lib/pdf";
 import { sendEmail } from "../../lib/email";
 import { receiptEmail } from "../../lib/templates";
+import { getEventSettings, emailCtx } from "../../lib/event";
+import { toBase64 } from "../../lib/base64";
 
 const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -20,21 +22,6 @@ interface RegRow {
   approve_status: string;
 }
 
-function toBase64(bytes: Uint8Array): string {
-  let bin = "";
-  const chunk = 0x8000;
-  for (let i = 0; i < bytes.length; i += chunk) {
-    bin += String.fromCharCode(...bytes.subarray(i, i + chunk));
-  }
-  return btoa(bin);
-}
-
-async function getEvent(env: Env): Promise<{ title: string; zoom_link: string }> {
-  const raw = await env.CONFIG.get("event");
-  const e = raw ? JSON.parse(raw) : {};
-  return { title: e.title ?? "การประชุมวิชาการออนไลน์", zoom_link: e.zoom_link ?? "" };
-}
-
 // POST /api/admin/registrations/:id/receipt — ออกใบเสร็จ (FR-05) + ส่งอีเมล+Zoom (FR-06)
 app.post("/:id{[0-9]+}/receipt", async (c) => {
   const id = parseInt(c.req.param("id"), 10);
@@ -47,18 +34,29 @@ app.post("/:id{[0-9]+}/receipt", async (c) => {
   if (!reg) return c.json({ error: "ไม่พบข้อมูล" }, 404);
   if (reg.approve_status !== "approved") return c.json({ error: "ต้องอนุมัติก่อนออกใบเสร็จ" }, 400);
 
-  // ออกใบเสร็จได้ครั้งเดียวต่อการลงทะเบียน
-  const existing = await c.env.DB.prepare("SELECT receipt_no, pdf_key FROM receipts WHERE registration_id = ?1")
+  const reissue = c.req.query("reissue") === "1";
+  const existing = await c.env.DB.prepare(
+    "SELECT id, receipt_no FROM receipts WHERE registration_id = ?1 AND voided_at IS NULL",
+  )
     .bind(id)
-    .first<{ receipt_no: string; pdf_key: string }>();
-  if (existing) return c.json({ error: "ออกใบเสร็จไปแล้ว", receipt_no: existing.receipt_no }, 409);
+    .first<{ id: number; receipt_no: string }>();
 
-  const event = await getEvent(c.env);
+  if (existing && !reissue) {
+    return c.json({ error: "ออกใบเสร็จไปแล้ว", receipt_no: existing.receipt_no }, 409);
+  }
+  // ออกใบเสร็จใหม่: void ใบเดิม (คง audit trail + เก็บ PDF เก่าไว้)
+  if (existing && reissue) {
+    await c.env.DB.prepare("UPDATE receipts SET voided_at = datetime('now') WHERE id = ?1")
+      .bind(existing.id)
+      .run();
+  }
+
+  const settings = await getEventSettings(c.env);
   const receiptNo = await nextDocNo(c.env.DB, `receipt_${c.env.EVENT_YEAR}`, "REC", c.env.EVENT_YEAR);
   const issueDate = new Date().toISOString();
 
   const pdf = await generateReceiptPdf({
-    orgName: event.title,
+    orgName: settings.title,
     receiptNo,
     issueDate,
     receiptName: reg.receipt_name,
@@ -78,12 +76,13 @@ app.post("/:id{[0-9]+}/receipt", async (c) => {
     .run();
 
   // ส่งอีเมลแนบ PDF + Zoom link
-  const mail = receiptEmail(
-    `${reg.prefix}${reg.first_name} ${reg.last_name}`,
-    reg.reg_no,
+  const mail = receiptEmail(emailCtx(c.env, settings), {
+    name: `${reg.prefix}${reg.first_name} ${reg.last_name}`,
+    regNo: reg.reg_no,
     receiptNo,
-    event.zoom_link,
-  );
+    amount: reg.amount,
+    zoomLink: settings.zoom_link,
+  });
   c.executionCtx.waitUntil(
     sendEmail(c.env, {
       to: reg.email,
@@ -101,7 +100,9 @@ app.post("/:id{[0-9]+}/receipt", async (c) => {
 // GET /api/admin/registrations/:id/receipt/pdf — ดาวน์โหลด PDF ใบเสร็จ
 app.get("/:id{[0-9]+}/receipt/pdf", async (c) => {
   const id = parseInt(c.req.param("id"), 10);
-  const rec = await c.env.DB.prepare("SELECT receipt_no, pdf_key FROM receipts WHERE registration_id = ?1")
+  const rec = await c.env.DB.prepare(
+    "SELECT receipt_no, pdf_key FROM receipts WHERE registration_id = ?1 AND voided_at IS NULL ORDER BY id DESC LIMIT 1",
+  )
     .bind(id)
     .first<{ receipt_no: string; pdf_key: string }>();
   if (!rec?.pdf_key) return c.json({ error: "ยังไม่ได้ออกใบเสร็จ" }, 404);
