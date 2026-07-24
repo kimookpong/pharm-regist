@@ -9,6 +9,7 @@ import reports from "./reports";
 import exportRoutes from "./export";
 import settings from "./settings";
 import emailRoutes from "./email";
+import adminUpload from "./upload";
 
 const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -23,5 +24,6 @@ app.route("/registrations", emailRoutes); // /api/admin/registrations/:id/{send-
 app.route("/reports", reports); // /api/admin/reports
 app.route("/export", exportRoutes); // /api/admin/export/{csv,xlsx,pdf}
 app.route("/settings", settings); // /api/admin/settings
+app.route("/upload", adminUpload); // /api/admin/upload/speaker-photo
 
 export default app;

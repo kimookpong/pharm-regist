@@ -2,31 +2,36 @@ import { Hono } from "hono";
 import { z } from "zod";
 import type { Env, Variables } from "../../types";
 import { requireRole } from "../../middleware/jwt";
+import { DEFAULT_EVENT } from "../../lib/event";
 
 const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 
-const DEFAULT_EVENT = {
-  title: "การประชุมวิชาการออนไลน์",
-  banner: "",
-  detail: "",
-  event_date: "",
-  cpe: 0,
-  activity_code: "",
-  agenda: [] as Array<{ time: string; topic: string }>,
-  contact: "",
-  fee: 0, // สตางค์
-  zoom_link: "",
-  register_open: true,
-};
+const speakerSchema = z.object({
+  name: z.string().max(200),
+  title: z.string().max(200).optional().default(""),
+  affiliation: z.string().max(300).optional().default(""),
+  license_no: z.string().max(50).optional().default(""),
+  expertise: z.string().max(500).optional().default(""),
+  topic: z.string().max(500).optional().default(""),
+  photo_key: z.string().max(200).optional().default(""),
+});
 
 const eventSchema = z.object({
   title: z.string().max(200),
+  subtitle_en: z.string().max(500).optional().default(""),
+  subtitle_th: z.string().max(500).optional().default(""),
   banner: z.string().max(1000).optional().default(""),
+  organizer: z.string().max(300).optional().default(""),
+  venue: z.string().max(300).optional().default(""),
   detail: z.string().max(5000).optional().default(""),
   event_date: z.string().max(200).optional().default(""),
   cpe: z.number().min(0).max(1000).optional().default(0),
   activity_code: z.string().max(100).optional().default(""),
   agenda: z.array(z.object({ time: z.string().max(50), topic: z.string().max(300) })).optional().default([]),
+  speakers: z.array(speakerSchema).optional().default([]),
+  objectives: z.array(z.string().max(500)).optional().default([]),
+  keywords: z.array(z.string().max(100)).optional().default([]),
+  target_audience: z.string().max(500).optional().default(""),
   contact: z.string().max(500).optional().default(""),
   fee: z.number().int().min(0).optional().default(0), // สตางค์
   zoom_link: z.string().max(1000).optional().default(""),

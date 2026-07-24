@@ -3,6 +3,7 @@ import { secureHeaders } from "hono/secure-headers";
 import type { Env, Variables } from "./types";
 import publicRoutes from "./routes/public";
 import uploadRoutes from "./routes/upload";
+import filesRoutes from "./routes/files";
 import authRoutes from "./routes/auth";
 import adminRoutes from "./routes/admin";
 
@@ -15,6 +16,7 @@ const api = new Hono<{ Bindings: Env; Variables: Variables }>();
 api.get("/health", (c) => c.json({ ok: true, app: c.env.APP_NAME }));
 api.route("/", publicRoutes); // /api/event, /api/register, /api/status
 api.route("/upload", uploadRoutes); // /api/upload
+api.route("/files", filesRoutes); // /api/files/speakers/:name
 api.route("/auth", authRoutes); // /api/auth/login
 api.route("/admin", adminRoutes); // /api/admin/* (JWT required)
 

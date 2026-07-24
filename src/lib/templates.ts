@@ -15,7 +15,7 @@ export interface EmailEvent {
 }
 export interface EmailCtx {
   event: EmailEvent;
-  appUrl: string; // เช่น https://regist.konthai.app
+  appUrl: string; // เช่น https://cpewu.konthai.app
 }
 
 function esc(s: string): string {

@@ -4,8 +4,8 @@ compatibility_date = "2025-01-01"
 compatibility_flags = ["nodejs_compat"]
 
 # Custom domain — zone konthai.app active บน Cloudflare แล้ว
-# wrangler จะสร้าง DNS record `regist` + SSL cert ให้อัตโนมัติตอน deploy
-routes = [{ pattern = "regist.konthai.app", custom_domain = true }]
+# wrangler จะสร้าง DNS record `cpewu` + SSL cert ให้อัตโนมัติตอน deploy
+routes = [{ pattern = "cpewu.konthai.app", custom_domain = true }]
 
 # ---- หน้าเว็บ React SPA (build จาก web/) ----
 [assets]
@@ -40,10 +40,10 @@ globs = ["**/*.ttf"]
 fallthrough = true
 
 [vars]
-APP_NAME = "ระบบรับลงทะเบียนประชุมวิชาการออนไลน์"
+APP_NAME = "ประชุมวิชาการเภสัชศาสตร์ ม.วลัยลักษณ์ (CCPE)"
 EVENT_YEAR = "2026"
-APP_URL = "https://regist.konthai.app"   # ใช้ทำลิงก์ในอีเมล (ตรวจสอบสถานะ/ลงทะเบียน)
-TURNSTILE_SITEKEY = "0x4AAAAAAD2oTDg098K8nyUP"   # ใส่ site key จาก Cloudflare Turnstile (ว่าง = ปิดการใช้งาน)
+APP_URL = "https://cpewu.konthai.app"   # ใช้ทำลิงก์ในอีเมล (ตรวจสอบสถานะ/ลงทะเบียน)
+TURNSTILE_SITEKEY = "0x4AAAAAAD2oTDg098K8nyUP"   # widget "pharm-regist" (allowlist: ccpe.konthai.app, regist.konthai.app, localhost)
 
 # ---- secrets (ตั้งด้วย: wrangler secret put <NAME>) ----
 #   JWT_SECRET       — คีย์เซ็น JWT
